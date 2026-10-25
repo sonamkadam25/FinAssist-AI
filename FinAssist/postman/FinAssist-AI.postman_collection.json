@@ -1,0 +1,205 @@
+{
+  "info": {
+    "_postman_id": "a78c2b15-599a-49d2-a03d-a8262534995f",
+    "name": "FinAssist AI - Transactions",
+    "description": "Synthetic transaction-management API requests for the FinAssist AI Week 1 milestone.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "transactionId",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create transaction",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"transactionType\": \"EXPENSE\",\n  \"amount\": 42.75,\n  \"category\": \"FOOD\",\n  \"merchant\": \"Harbor Cafe\",\n  \"description\": \"Lunch\",\n  \"transactionDate\": \"2026-10-24T12:30:00\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "List transactions",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Filter by amount and status",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions?minAmount=100&maxAmount=5000&status=COMPLETED",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions"
+          ],
+          "query": [
+            {
+              "key": "minAmount",
+              "value": "100"
+            },
+            {
+              "key": "maxAmount",
+              "value": "5000"
+            },
+            {
+              "key": "status",
+              "value": "COMPLETED"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Filter expenses by category",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions?transactionType=EXPENSE&category=FOOD",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions"
+          ],
+          "query": [
+            {
+              "key": "transactionType",
+              "value": "EXPENSE"
+            },
+            {
+              "key": "category",
+              "value": "FOOD"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Filter by transaction date",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions?startDate=2026-10-01T00:00:00&endDate=2026-10-25T23:59:59",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions"
+          ],
+          "query": [
+            {
+              "key": "startDate",
+              "value": "2026-10-01T00:00:00"
+            },
+            {
+              "key": "endDate",
+              "value": "2026-10-25T23:59:59"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get transaction by ID",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions/{{transactionId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions",
+            "{{transactionId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Update transaction",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"transactionType\": \"EXPENSE\",\n  \"amount\": 48.25,\n  \"category\": \"FOOD\",\n  \"merchant\": \"Harbor Cafe\",\n  \"description\": \"Updated lunch total\",\n  \"transactionDate\": \"2026-10-24T12:30:00\",\n  \"status\": \"COMPLETED\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions/{{transactionId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions",
+            "{{transactionId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Delete transaction",
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions/{{transactionId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions",
+            "{{transactionId}}"
+          ]
+        }
+      }
+    }
+  ]
+}
