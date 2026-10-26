@@ -162,7 +162,7 @@ Example list response (`200 OK`):
 }
 ```
 
-`minAmount` cannot exceed `maxAmount`, and `startDate` cannot be after `endDate`; invalid enum values and ranges return `400 Bad Request`.
+When provided, `minAmount` must be greater than zero and cannot exceed `maxAmount`. `startDate` cannot be after `endDate`. Invalid enum values, date formats, and ranges return `400 Bad Request` with the invalid parameter identified in `details`.
 
 ### Retrieve one transaction
 
@@ -202,6 +202,36 @@ Validation and filter errors return `400`; missing transaction IDs return `404`.
   }
 }
 ```
+
+Malformed query values identify the query parameter and explain the expected format or enum values. Unexpected server errors return `500` with a generic message; details are logged server-side and are not returned to the client.
+
+Validation examples:
+
+```text
+POST http://localhost:8080/api/transactions
+Content-Type: application/json
+
+{"transactionType":"EXPENSE","amount":42.75,"category":"FOOD","merchant":"Harbor Cafe","transactionDate":"2026-10-24T12:30:00"}
+```
+
+Expected: `201 Created`.
+
+```text
+POST http://localhost:8080/api/transactions
+Content-Type: application/json
+
+{"transactionType":"EXPENSE","amount":0,"category":"FOOD","merchant":"Harbor Cafe","transactionDate":"2026-10-24T12:30:00"}
+```
+
+Expected: `400 Bad Request`, with an amount validation message under `details.amount`.
+
+```text
+GET http://localhost:8080/api/transactions?minAmount=0
+GET http://localhost:8080/api/transactions?status=UNKNOWN
+GET http://localhost:8080/api/transactions?startDate=not-a-date
+```
+
+Expected: `400 Bad Request`, with `details.minAmount`, `details.status`, or `details.startDate` identifying the invalid parameter.
 
 ## Postman
 

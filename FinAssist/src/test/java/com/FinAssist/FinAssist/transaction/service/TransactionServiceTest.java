@@ -133,6 +133,36 @@ class TransactionServiceTest {
     }
 
     @Test
+    void rejectsNonPositiveMinimumAmountFilter() {
+        assertThrows(IllegalArgumentException.class, () -> transactionService.findAll(
+                BigDecimal.ZERO,
+                new BigDecimal("500"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                0,
+                20
+        ));
+    }
+
+    @Test
+    void rejectsDateRangeWhenStartIsAfterEnd() {
+        assertThrows(IllegalArgumentException.class, () -> transactionService.findAll(
+                null,
+                null,
+                null,
+                null,
+                null,
+                LocalDateTime.parse("2026-10-26T00:00:00"),
+                LocalDateTime.parse("2026-10-25T00:00:00"),
+                0,
+                20
+        ));
+    }
+
+    @Test
     void rejectsInvalidPagination() {
         assertThrows(IllegalArgumentException.class, () -> transactionService.findAll(
                 null, null, null, null, null, null, null, 0, 101));

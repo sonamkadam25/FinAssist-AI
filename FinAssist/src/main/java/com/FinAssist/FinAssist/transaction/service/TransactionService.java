@@ -97,6 +97,9 @@ public class TransactionService {
             LocalDateTime startDate,
             LocalDateTime endDate
     ) {
+        if (minAmount != null && minAmount.signum() <= 0) {
+            throw new IllegalArgumentException("minAmount must be greater than zero");
+        }
         if (minAmount != null && maxAmount != null && minAmount.compareTo(maxAmount) > 0) {
             throw new IllegalArgumentException("minAmount must be less than or equal to maxAmount");
         }
