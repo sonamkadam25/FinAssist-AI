@@ -141,6 +141,77 @@
       }
     },
     {
+      "name": "Transaction summary - all dates",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions/summary",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions",
+            "summary"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Transaction summary - date range",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions/summary?startDate=2026-10-01T00:00:00&endDate=2026-10-27T23:59:59",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions",
+            "summary"
+          ],
+          "query": [
+            {
+              "key": "startDate",
+              "value": "2026-10-01T00:00:00"
+            },
+            {
+              "key": "endDate",
+              "value": "2026-10-27T23:59:59"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Transaction summary - invalid date range",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/transactions/summary?startDate=2026-10-28T00:00:00&endDate=2026-10-27T23:59:59",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "transactions",
+            "summary"
+          ],
+          "query": [
+            {
+              "key": "startDate",
+              "value": "2026-10-28T00:00:00"
+            },
+            {
+              "key": "endDate",
+              "value": "2026-10-27T23:59:59"
+            }
+          ]
+        }
+      }
+    },
+    {
       "name": "Get transaction by ID",
       "request": {
         "method": "GET",

@@ -1,7 +1,9 @@
 package com.FinAssist.FinAssist.transaction.service;
 
 import com.FinAssist.FinAssist.transaction.dto.CreateTransactionRequest;
+import com.FinAssist.FinAssist.transaction.dto.CategorySummary;
 import com.FinAssist.FinAssist.transaction.dto.TransactionResponse;
+import com.FinAssist.FinAssist.transaction.dto.TransactionSummaryResponse;
 import com.FinAssist.FinAssist.transaction.dto.UpdateTransactionRequest;
 import com.FinAssist.FinAssist.transaction.entity.Transaction;
 import com.FinAssist.FinAssist.transaction.entity.TransactionStatus;
@@ -16,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @Transactional
@@ -66,6 +70,49 @@ public class TransactionService {
     }
 
     @Transactional(readOnly = true)
+    public TransactionSummaryResponse summarize(LocalDateTime startDate, LocalDateTime endDate) {
+        validateFilters(null, null, startDate, endDate);
+
+        var aggregate = transactionRepository.summarize(
+                startDate,
+                endDate,
+                TransactionType.INCOME,
+                TransactionType.EXPENSE,
+                TransactionStatus.COMPLETED,
+                TransactionStatus.PENDING,
+                TransactionStatus.FAILED
+        );
+        List<CategorySummary> expenseTotals = new ArrayList<>();
+        List<CategorySummary> incomeTotals = new ArrayList<>();
+        for (var categoryAggregate : transactionRepository.summarizeByCategory(
+                startDate, endDate, TransactionStatus.COMPLETED)) {
+            CategorySummary categorySummary = new CategorySummary(
+                    categoryAggregate.getCategory(),
+                    zeroIfNull(categoryAggregate.getTotalAmount())
+            );
+            if (categoryAggregate.getTransactionType() == TransactionType.EXPENSE) {
+                expenseTotals.add(categorySummary);
+            } else if (categoryAggregate.getTransactionType() == TransactionType.INCOME) {
+                incomeTotals.add(categorySummary);
+            }
+        }
+
+        BigDecimal totalIncome = zeroIfNull(aggregate.getTotalIncome());
+        BigDecimal totalExpenses = zeroIfNull(aggregate.getTotalExpenses());
+        return new TransactionSummaryResponse(
+                totalIncome,
+                totalExpenses,
+                totalIncome.subtract(totalExpenses),
+                zeroIfNull(aggregate.getTotalTransactions()),
+                zeroIfNull(aggregate.getCompletedTransactions()),
+                zeroIfNull(aggregate.getPendingTransactions()),
+                zeroIfNull(aggregate.getFailedTransactions()),
+                List.copyOf(expenseTotals),
+                List.copyOf(incomeTotals)
+        );
+    }
+
+    @Transactional(readOnly = true)
     public TransactionResponse findById(Long id) {
         return TransactionResponse.from(findTransaction(id));
     }
@@ -106,5 +153,13 @@ public class TransactionService {
         if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
             throw new IllegalArgumentException("startDate must be less than or equal to endDate");
         }
+    }
+
+    private BigDecimal zeroIfNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private long zeroIfNull(Long value) {
+        return value == null ? 0 : value;
     }
 }

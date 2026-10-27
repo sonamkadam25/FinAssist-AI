@@ -1,6 +1,7 @@
 package com.FinAssist.FinAssist.transaction.controller;
 
 import com.FinAssist.FinAssist.transaction.dto.TransactionResponse;
+import com.FinAssist.FinAssist.transaction.dto.TransactionSummaryResponse;
 import com.FinAssist.FinAssist.transaction.entity.TransactionStatus;
 import com.FinAssist.FinAssist.transaction.entity.TransactionType;
 import com.FinAssist.FinAssist.transaction.service.TransactionNotFoundException;
@@ -17,6 +18,7 @@ import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -146,6 +148,63 @@ class TransactionControllerTest {
                 .andExpect(jsonPath("$.message").value("Query parameter has an invalid value"))
                 .andExpect(jsonPath("$.details.status")
                         .value("must be one of: PENDING, COMPLETED, FAILED"));
+    }
+
+    @Test
+    void summaryRouteReturnsDedicatedSummaryResponse() throws Exception {
+        when(transactionService.summarize(null, null)).thenReturn(new TransactionSummaryResponse(
+                new BigDecimal("3200.00"),
+                new BigDecimal("245.50"),
+                new BigDecimal("2954.50"),
+                5,
+                2,
+                2,
+                1,
+                java.util.List.of(),
+                java.util.List.of()
+        ));
+
+        mockMvc.perform(get("/api/transactions/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalIncome").value(3200.00))
+                .andExpect(jsonPath("$.totalExpenses").value(245.50))
+                .andExpect(jsonPath("$.netBalance").value(2954.50))
+                .andExpect(jsonPath("$.totalTransactions").value(5))
+                .andExpect(jsonPath("$.pendingTransactions").value(2));
+
+        verify(transactionService).summarize(null, null);
+    }
+
+    @Test
+    void summaryRouteAcceptsOptionalDateRange() throws Exception {
+        when(transactionService.summarize(any(), any())).thenReturn(new TransactionSummaryResponse(
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                0,
+                0,
+                0,
+                0,
+                java.util.List.of(),
+                java.util.List.of()
+        ));
+
+        mockMvc.perform(get("/api/transactions/summary")
+                        .param("startDate", "2026-10-01T00:00:00")
+                        .param("endDate", "2026-10-27T23:59:59"))
+                .andExpect(status().isOk());
+
+        verify(transactionService).summarize(
+                eq(LocalDateTime.parse("2026-10-01T00:00:00")),
+                eq(LocalDateTime.parse("2026-10-27T23:59:59"))
+        );
+    }
+
+    @Test
+    void summaryRouteRejectsMalformedDateParameter() throws Exception {
+        mockMvc.perform(get("/api/transactions/summary").param("startDate", "not-a-date"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details.startDate").exists());
     }
 
     @Test

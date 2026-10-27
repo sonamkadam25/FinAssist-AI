@@ -3,6 +3,7 @@ package com.FinAssist.FinAssist.transaction.controller;
 import com.FinAssist.FinAssist.transaction.dto.CreateTransactionRequest;
 import com.FinAssist.FinAssist.transaction.dto.TransactionPageResponse;
 import com.FinAssist.FinAssist.transaction.dto.TransactionResponse;
+import com.FinAssist.FinAssist.transaction.dto.TransactionSummaryResponse;
 import com.FinAssist.FinAssist.transaction.dto.UpdateTransactionRequest;
 import com.FinAssist.FinAssist.transaction.entity.TransactionStatus;
 import com.FinAssist.FinAssist.transaction.entity.TransactionType;
@@ -60,6 +61,14 @@ public class TransactionController {
         Page<TransactionResponse> transactions = transactionService.findAll(
                 minAmount, maxAmount, status, transactionType, category, startDate, endDate, page, size);
         return TransactionPageResponse.from(transactions);
+    }
+
+    @GetMapping("/summary")
+    public TransactionSummaryResponse summarize(
+            @RequestParam(required = false) LocalDateTime startDate,
+            @RequestParam(required = false) LocalDateTime endDate
+    ) {
+        return transactionService.summarize(startDate, endDate);
     }
 
     @GetMapping("/{id}")

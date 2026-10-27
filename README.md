@@ -164,6 +164,48 @@ Example list response (`200 OK`):
 
 When provided, `minAmount` must be greater than zero and cannot exceed `maxAmount`. `startDate` cannot be after `endDate`. Invalid enum values, date formats, and ranges return `400 Bad Request` with the invalid parameter identified in `details`.
 
+### Transaction summary
+
+`GET /api/transactions/summary` returns transaction statistics from the stored data. It accepts optional `startDate` and `endDate` parameters in the same ISO local date-time format used by transaction search. Dates are inclusive; either bound may be supplied alone. `startDate` after `endDate` returns `400 Bad Request`.
+
+The response is a dedicated summary DTO:
+
+```json
+{
+  "totalIncome": 3200.00,
+  "totalExpenses": 245.50,
+  "netBalance": 2954.50,
+  "totalTransactions": 5,
+  "completedTransactions": 2,
+  "pendingTransactions": 2,
+  "failedTransactions": 1,
+  "expenseTotalsByCategory": [
+    { "category": "FOOD", "totalAmount": 145.50 },
+    { "category": "TRAVEL", "totalAmount": 100.00 }
+  ],
+  "incomeTotalsByCategory": [
+    { "category": "SALARY", "totalAmount": 3200.00 }
+  ]
+}
+```
+
+Only `COMPLETED` transactions contribute to income, expenses, net balance, or category totals. Transaction counts include all transactions in the selected date range and separately report `COMPLETED`, `PENDING`, and `FAILED`. For example, the response above has 3,200.00 completed income minus 245.50 completed expenses, yielding a 2,954.50 net balance. Pending and failed transactions are counted but do not change those financial totals. Empty date ranges return zero totals and empty category arrays.
+
+Example requests:
+
+```text
+GET http://localhost:8080/api/transactions/summary
+GET http://localhost:8080/api/transactions/summary?startDate=2026-10-01T00:00:00&endDate=2026-10-27T23:59:59
+GET http://localhost:8080/api/transactions/summary?startDate=2026-10-01T00:00:00
+GET http://localhost:8080/api/transactions/summary?startDate=2026-10-28T00:00:00&endDate=2026-10-27T23:59:59
+```
+
+The last request returns `400 Bad Request`. Malformed date values are also rejected by the existing query-parameter error handling.
+
+The repository uses database-side `SUM`, `COUNT`, and `GROUP BY` aggregates. The database processes matching rows and returns compact totals rather than loading every transaction into Java, which reduces application memory use and transfer volume as the table grows. The service safely converts SQL `NULL` aggregate values to zero, computes net balance with `BigDecimal`, and splits grouped results into expense and income category lists. It uses a straightforward loop for this small transformation; Java Streams are not used to regroup transaction rows because grouping is already done efficiently by the database.
+
+The summary route is a separate literal mapping under `/api/transactions`; it does not replace the collection list or the numeric `/{id}` resource route.
+
 ### Retrieve one transaction
 
 `GET /api/transactions/{id}` — returns `200 OK` and the transaction, or `404 Not Found` if it does not exist.
@@ -235,7 +277,7 @@ Expected: `400 Bad Request`, with `details.minAmount`, `details.status`, or `det
 
 ## Postman
 
-Import [`FinAssist/postman/FinAssist-AI.postman_collection.json`](FinAssist/postman/FinAssist-AI.postman_collection.json) into Postman. It contains create, list, amount/status/type/category/date filters, get-by-ID, update, and delete requests. Set the collection variable `baseUrl` to `http://localhost:8080` and `transactionId` to an ID returned by the create request.
+Import [`FinAssist/postman/FinAssist-AI.postman_collection.json`](FinAssist/postman/FinAssist-AI.postman_collection.json) into Postman. It contains create, list, amount/status/type/category/date filters, all-date and date-range summaries (including an invalid-range example), get-by-ID, update, and delete requests. Set the collection variable `baseUrl` to `http://localhost:8080` and `transactionId` to an ID returned by the create request.
 
 ## Tests
 
@@ -246,4 +288,4 @@ Set-Location .\FinAssist
 .\mvnw.cmd test
 ```
 
-The tests cover the MVC request/response behavior, validation, invalid enum filters, not-found responses, CRUD service operations, filtering inputs, and invalid amount/pagination ranges. They use mocks and do not require a running MySQL server; the application itself does require MySQL.
+The tests cover the MVC request/response behavior, validation, invalid enum filters, not-found responses, CRUD service operations, filtering inputs, invalid amount/pagination ranges, summary metrics and category totals, empty summaries, date-range behavior, and summary route mapping. Repository summary tests mock aggregate projections and do not require a running MySQL server; the application itself does require MySQL.
