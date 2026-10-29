@@ -2,6 +2,7 @@ package com.FinAssist.FinAssist.ask.controller;
 
 import com.FinAssist.FinAssist.ask.dto.AskRequest;
 import com.FinAssist.FinAssist.ask.dto.AskResponse;
+import com.FinAssist.FinAssist.ask.dto.AskResult;
 import com.FinAssist.FinAssist.ask.service.AskService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +22,7 @@ public class AskController {
 
     @PostMapping
     public AskResponse ask(@Valid @RequestBody AskRequest request) {
-        return new AskResponse(request.question(), askService.ask(request.question()));
+        AskResult result = askService.ask(request.question());
+        return new AskResponse(request.question(), result.answer(), result.data());
     }
 }

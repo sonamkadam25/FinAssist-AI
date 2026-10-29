@@ -1,6 +1,7 @@
 package com.FinAssist.FinAssist.transaction.controller;
 
 import com.FinAssist.FinAssist.ask.service.AskServiceException;
+import com.FinAssist.FinAssist.ask.service.TransactionDataToolException;
 import com.FinAssist.FinAssist.transaction.service.TransactionNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -36,6 +37,23 @@ public class GlobalExceptionHandler {
         return response(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "The AI service is currently unavailable. Please try again later.",
+                Map.of()
+        );
+    }
+
+    @ExceptionHandler(TransactionDataToolException.class)
+    public ResponseEntity<ApiError> handleTransactionToolFailure(TransactionDataToolException exception) {
+        if (exception.hasInvalidArguments()) {
+            return response(
+                    HttpStatus.BAD_REQUEST,
+                    "Transaction query arguments are invalid",
+                    Map.of("transactionQuery", exception.getMessage())
+            );
+        }
+        logger.error("AI transaction data operation failed", exception);
+        return response(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Transaction data could not be retrieved",
                 Map.of()
         );
     }

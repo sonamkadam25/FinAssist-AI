@@ -1,6 +1,8 @@
 package com.FinAssist.FinAssist.ask.service;
 
+import com.FinAssist.FinAssist.ask.dto.AskResult;
+
 public interface AskService {
 
-    String ask(String question);
+    AskResult ask(String question);
 }

@@ -2,6 +2,7 @@ package com.FinAssist.FinAssist.ask.controller;
 
 import com.FinAssist.FinAssist.ask.service.AskService;
 import com.FinAssist.FinAssist.ask.service.AskServiceException;
+import com.FinAssist.FinAssist.ask.dto.AskResult;
 import com.FinAssist.FinAssist.transaction.controller.GlobalExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +32,10 @@ class AskControllerTest {
     @Test
     void returnsAnswerForValidQuestion() throws Exception {
         when(askService.ask("Explain the difference between saving and investing."))
-                .thenReturn("Saving prioritizes access; investing seeks long-term growth.");
+                .thenReturn(new AskResult(
+                        "Saving prioritizes access; investing seeks long-term growth.",
+                        null
+                ));
 
         mockMvc.perform(post("/api/ask")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -44,7 +48,8 @@ class AskControllerTest {
                 .andExpect(jsonPath("$.question")
                         .value("Explain the difference between saving and investing."))
                 .andExpect(jsonPath("$.answer")
-                        .value("Saving prioritizes access; investing seeks long-term growth."));
+                        .value("Saving prioritizes access; investing seeks long-term growth."))
+                .andExpect(jsonPath("$.data").doesNotExist());
 
         verify(askService).ask("Explain the difference between saving and investing.");
     }
