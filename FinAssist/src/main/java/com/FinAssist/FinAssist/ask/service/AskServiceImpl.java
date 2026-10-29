@@ -1,6 +1,7 @@
 package com.FinAssist.FinAssist.ask.service;
 
 import com.FinAssist.FinAssist.ask.dto.AskResult;
+import com.FinAssist.FinAssist.ask.dto.AskTransactionData;
 import com.FinAssist.FinAssist.transaction.service.TransactionService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,10 @@ public class AskServiceImpl implements AskService {
             "The AI service could not generate a response. Please try again later.";
     private static final String TRANSACTION_DATA_UNAVAILABLE =
             "I could not map that transaction question to a supported query. Please specify a transaction status, type, category, amount threshold, or date range.";
+    private static final String NO_MATCHING_TRANSACTIONS =
+            "No transactions matched the requested filters.";
+    private static final String NO_TRANSACTIONS_IN_RANGE =
+            "No transactions were recorded in the requested date range.";
 
     private final ChatClient chatClient;
     private final TransactionService transactionService;
@@ -58,6 +63,10 @@ public class AskServiceImpl implements AskService {
             if (requiresTransactionData(question) && !tools.wasOperationExecuted()) {
                 return new AskResult(TRANSACTION_DATA_UNAVAILABLE, null);
             }
+            String emptyResultAnswer = emptyResultAnswer(tools.getData());
+            if (emptyResultAnswer != null) {
+                return new AskResult(emptyResultAnswer, tools.getData());
+            }
             return new AskResult(answer, tools.getData());
         } catch (TransactionDataToolException exception) {
             throw exception;
@@ -76,5 +85,18 @@ public class AskServiceImpl implements AskService {
         return normalized.matches("(?s).*\\btransactions?\\b.*")
                 || normalized.matches("(?s).*\\b(how much did i spend|how much have i spent|my spending|my expenses|my income|my balance)\\b.*")
                 || normalized.matches("(?s).*\\b(this month|last month)\\b.*\\b(spend|spent|spending|expense|expenses|income|transaction|transactions)\\b.*");
+    }
+
+    private String emptyResultAnswer(AskTransactionData data) {
+        if (data == null) {
+            return null;
+        }
+        if (data.search() != null && data.search().totalMatches() == 0) {
+            return NO_MATCHING_TRANSACTIONS;
+        }
+        if (data.summary() != null && data.summary().statistics().totalTransactions() == 0) {
+            return NO_TRANSACTIONS_IN_RANGE;
+        }
+        return null;
     }
 }

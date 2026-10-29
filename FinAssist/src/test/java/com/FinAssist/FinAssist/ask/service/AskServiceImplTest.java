@@ -163,4 +163,42 @@ class AskServiceImplTest {
         );
         assertNull(result.data());
     }
+
+    @Test
+    void emptyBackendSummaryOverridesAnUnsupportedModelClaim() {
+        String question = "How much did I spend this month?";
+        TransactionSummaryResponse emptySummary = new TransactionSummaryResponse(
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                0,
+                0,
+                0,
+                0,
+                List.of(),
+                List.of()
+        );
+        when(transactionService.summarize(
+                java.time.LocalDateTime.parse("2026-10-01T00:00"),
+                java.time.LocalDateTime.parse("2026-10-31T23:59:59.999999")))
+                .thenReturn(emptySummary);
+        AtomicReference<TransactionDataTools> registeredTools = new AtomicReference<>();
+        when(chatClient.prompt()).thenReturn(requestSpec);
+        when(requestSpec.tools(any(Object[].class))).thenAnswer(invocation -> {
+            registeredTools.set(invocation.getArgument(0, TransactionDataTools.class));
+            return requestSpec;
+        });
+        when(requestSpec.system(anyString())).thenReturn(requestSpec);
+        when(requestSpec.user(question)).thenReturn(requestSpec);
+        when(requestSpec.call()).thenAnswer(invocation -> {
+            registeredTools.get().getCurrentMonthTransactionSummary();
+            return responseSpec;
+        });
+        when(responseSpec.content()).thenReturn("You spent 450.25.");
+
+        AskResult result = askService.ask(question);
+
+        assertEquals("No transactions were recorded in the requested date range.", result.answer());
+        assertEquals(0, result.data().summary().statistics().totalTransactions());
+    }
 }

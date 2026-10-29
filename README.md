@@ -1,6 +1,6 @@
 # FinAssist-AI
 
-FinAssist AI is a financial transaction analysis assistant. This repository is being built in milestones: the first milestone provides a transaction-management API as a safe foundation for future analysis features.
+FinAssist AI is a Spring Boot financial transaction analysis assistant. It provides transaction CRUD, filtering, backend-calculated summaries, and an Ollama-backed `/api/ask` endpoint that can use bounded, validated Spring AI tools to query the shared transaction dataset. Use synthetic/demo records only.
 
 ## Current implementation status
 
@@ -13,26 +13,27 @@ FinAssist AI is a financial transaction analysis assistant. This repository is b
 - Use `BigDecimal` for money and string-backed enums for transaction type and status.
 - Create/update the database schema without dropping existing data.
 - Answer general financial questions through a local Ollama model using Spring AI.
-- Summarize stored transactions with status-aware totals and optional date filtering.
+- Search transactions and obtain backend-calculated transaction summaries through narrowly scoped Spring AI tools.
+- Return structured backend evidence alongside the AI answer, including bounded transaction results or exact summary statistics.
+- Use a configurable reporting time zone (UTC by default) for "this month" transaction summaries.
 
-### Planned
+### Not implemented
 
-- AI-assisted transaction analysis using validated backend operations.
-- Validated backend operations for any future AI tool calls.
-- Authentication and frontend functionality.
+- Authentication, authorization, and per-user/tenant transaction isolation.
+- Frontend, bank integrations, conversation memory, embeddings, vector search, or RAG.
 
-The `/api/ask` endpoint currently handles general financial questions only. It is not connected to transaction records. Transaction summary statistics are calculated by the backend endpoint; no AI tool calling, RAG, authentication, payment integration, or frontend features are implemented.
+**Security limitation:** the API currently has no Spring Security dependency or identity model. Transaction records are shared and the implemented endpoints are unauthenticated. Do not deploy this version with real or private financial information. Authentication and user/tenant scoping must be designed and enforced in backend queries before such use.
 
 ## Technology stack
 
 - Java 21
 - Spring Boot 4.1.1
 - Spring MVC
-- Spring AI ChatClient with Ollama
+- Spring AI 2.0.1 `ChatClient` and tool calling with Ollama
 - Spring Data JPA / Hibernate
 - MySQL
 - Jakarta Bean Validation
-- JUnit 5, Mockito, and Spring MVC test support
+- JUnit 5, Mockito, and Spring Boot MVC test support
 
 ## Prerequisites
 
@@ -87,7 +88,7 @@ $env:OLLAMA_MODEL = "codellama:latest"
 $env:OLLAMA_TEMPERATURE = "0.7"
 ```
 
-The request path is `AskController` → `AskService`/`AskServiceImpl` → Spring AI `ChatClient` → local Ollama. The service passes the submitted question with a system instruction that prevents claiming access to personal accounts or inventing transaction information. Ollama errors produce a service-unavailable response rather than a successful fabricated answer.
+The request path is `AskController` → `AskServiceImpl` → Spring AI `ChatClient` → local Ollama. For transaction questions, the model may call only the supplied read-only tools. Tools validate arguments and delegate to the existing `TransactionService`; the service/repository perform the query and all financial calculations. The model cannot access the repository or execute SQL directly. Tool searches return at most 20 minimized records. The API returns backend-derived structured data alongside the generated explanation. If a transaction question does not execute a supported tool, the response states that the request could not be mapped to a supported query. Ollama failures produce a service-unavailable response.
 
 ## Run the application
 
@@ -110,6 +111,8 @@ The `transactions` table stores transaction type and status as readable enum str
 ## REST API
 
 All request and response bodies use JSON. Send `Content-Type: application/json` for POST and PUT. Timestamps use ISO local date-time format, for example `2026-10-24T12:30:00`.
+
+No authentication is currently configured: these routes are public and operate on the shared database. There is no 401/403 login flow or per-user transaction scope. This is an explicit local-demo limitation, not a security guarantee; do not use real financial data or expose the service to an untrusted network.
 
 | Method | URL | Successful response |
 | --- | --- | --- |
@@ -251,11 +254,12 @@ Example response (`200 OK`; the generated wording may vary):
 ```json
 {
   "question": "Explain the difference between saving and investing.",
-  "answer": "Saving generally keeps money accessible for near-term needs, while investing puts money into assets for potential long-term growth and carries a risk of loss."
+  "answer": "Saving generally keeps money accessible for near-term needs, while investing puts money into assets for potential long-term growth and carries a risk of loss.",
+  "data": null
 }
 ```
 
-Blank, whitespace-only, or missing questions return `400 Bad Request` with a field-specific `details.question` message. If Ollama cannot generate a nonblank answer, the API returns `503 Service Unavailable` with a generic error body. This endpoint does not read MySQL transactions: a question such as “How much did I spend this month?” must not be answered with an invented amount and the assistant is instructed to explain that transaction data is unavailable to it.
+Blank, whitespace-only, or missing questions return `400 Bad Request` with a field-specific `details.question` message. If Ollama cannot generate a nonblank answer, the API returns `503 Service Unavailable` with a generic error body. Invalid tool arguments return `400`; transaction data query failures return a sanitized `500`. Transaction questions can invoke the approved read-only transaction tools. The response includes `data.summary` or `data.search` when backend data was retrieved; it is `null` for general questions or unsupported transaction requests. Empty backend results get a deterministic empty-result answer rather than model-generated amounts.
 
 Try these questions:
 
@@ -263,11 +267,88 @@ Try these questions:
 {"question":"What is compound interest?"}
 {"question":"How can I create a monthly budget?"}
 {"question":"How much did I spend this month?"}
+{"question":"Show completed transactions"}
+{"question":"Find expenses with an amount of at least 5000"}
+{"question":"Summarize transactions from 2026-10-01T00:00:00 to 2026-10-25T23:59:59"}
 ```
 
-## AI limitations
+Transaction searches support the existing status, type, exact category, positive min/max amount, and inclusive date filters. Amount bounds are inclusive (`minAmount=5000` means at least 5,000); strict greater-than matching is not a distinct filter. Tool search results are capped at 20 records and contain only ID, type, amount, category, transaction date, and status. Summary totals and counts come from the backend summary service and are returned in `data.summary.statistics`; completed income/expenses contribute to totals, while pending and failed transactions are counted but excluded. A summary is not an account balance. The reporting zone defaults to UTC and can be changed with `FINASSIST_REPORTING_ZONE`; stored `LocalDateTime` values do not contain a zone, so that configuration defines which calendar month bounds are used.
 
-The local model provides general responses and can be inaccurate; verify important financial decisions independently. The AI endpoint does not access transaction rows, account balances, or bank accounts. There is no conversation memory, arbitrary SQL generation, AI tool calling, embeddings, or RAG.
+Unsupported/ambiguous questions are not satisfied by guessing filters. Tool arguments are validated again in the backend. A model may still produce variable natural-language wording, so use the structured `data` fields as the authoritative values. No API connects to a bank or calculates a real account balance.
+
+## Architecture and data flow
+
+```mermaid
+flowchart TD
+    C[API client] --> AC[AskController]
+    AC --> AS[AskServiceImpl]
+    AS --> CC[Spring AI ChatClient]
+    CC <--> O[Local Ollama model]
+    CC -->|approved tool call only| T[TransactionDataTools]
+    T -->|validated arguments| TS[TransactionService]
+    TS --> R[TransactionRepository]
+    R --> DB[(MySQL)]
+    DB --> R --> TS --> T --> CC
+    CC --> AS --> AC --> C
+    TC[TransactionController] --> TS
+```
+
+- **Controllers** validate HTTP input and map service results to response DTOs.
+- **AskServiceImpl** owns AI orchestration and creates a per-request tool instance so returned data and tool state cannot leak across requests.
+- **TransactionDataTools** exposes only read-only, explicitly annotated operations; it validates enum, amount, date, and range arguments and caps search output at 20.
+- **TransactionService** is the shared business layer for CRUD, specifications, pagination, and database-side summaries.
+- **TransactionRepository/MySQL** execute parameterized Spring Data JPA queries and aggregates; the model has no direct database access.
+- **GlobalExceptionHandler** maps validation, missing resources, model failures, and tool failures into the common error structure without returning internal exception details.
+- **Ollama** runs locally at the configured base URL. Its natural-language response is not the authority for numeric facts; backend data returned in the API is.
+
+### Design trade-offs and limitations
+
+- Financial totals are calculated with backend `BigDecimal`/database aggregates to avoid asking the LLM to perform arithmetic.
+- Deterministic database filters remain the source of truth for structured questions; AI tool arguments are validated independently before service execution.
+- Tool search returns only a bounded, minimized set of fields. It is not a replacement for transaction APIs or an unrestricted data export.
+- Local Ollama avoids sending prompts to a hosted model, but generation can be slow and constrained by local hardware/model quality. Ordinary tests mock AI calls.
+- Vector search was deliberately not added: structured fields and totals require deterministic database logic, and semantic description retrieval is not essential for the current model. Avoiding extra dependencies/infrastructure keeps the core stable.
+- No Spring Security, user identity, authorization, or transaction ownership scope exists. All current routes are unauthenticated and share one dataset. This is suitable only for local/demo data; adding security requires selecting an identity approach and then enforcing ownership in every backend query, not in an LLM prompt.
+- The database is a shared development/demo database. Seed or create synthetic records only. Do not treat outputs as live bank data or as financial advice.
+
+### Request/response example for transaction analysis
+
+`POST /api/ask`
+
+```json
+{
+  "question": "How much did I spend this month?"
+}
+```
+
+Illustrative response shape (amounts/counts below are placeholders; actual values come from the database):
+
+```json
+{
+  "question": "How much did I spend this month?",
+  "answer": "The backend summary shows ...",
+  "data": {
+    "summary": {
+      "startDate": "2026-10-01T00:00:00",
+      "endDate": "2026-10-31T23:59:59.999999",
+      "statistics": {
+        "totalIncome": 0.00,
+        "totalExpenses": 0.00,
+        "netBalance": 0.00,
+        "totalTransactions": 0,
+        "completedTransactions": 0,
+        "pendingTransactions": 0,
+        "failedTransactions": 0,
+        "expenseTotalsByCategory": [],
+        "incomeTotalsByCategory": []
+      }
+    },
+    "search": null
+  }
+}
+```
+
+Structured fields can be cross-checked against `GET /api/transactions/summary` with the same date bounds. Do not assert exact AI prose.
 
 ### Retrieve one transaction
 
@@ -340,7 +421,18 @@ Expected: `400 Bad Request`, with `details.minAmount`, `details.status`, or `det
 
 ## Postman
 
-Import [`FinAssist/postman/FinAssist-AI.postman_collection.json`](FinAssist/postman/FinAssist-AI.postman_collection.json) into Postman. It contains AI ask and transaction CRUD, filters, and summary requests. Set the collection variable `baseUrl` to `http://localhost:8080` and `transactionId` to an ID returned by the create request.
+Import [`FinAssist/postman/FinAssist-AI.postman_collection.json`](FinAssist/postman/FinAssist-AI.postman_collection.json) into Postman and select the collection variables. Set `baseUrl` to `http://localhost:8080`. `transactionId` is automatically set by **Transaction CRUD → Create transaction**; no token or credential variable exists because authentication is not implemented.
+
+The collection has these folders and checks:
+
+- **Transaction CRUD:** create, retrieve, update, and delete. Run in that order; create stores the generated ID.
+- **Transaction Search and Filters:** page shape, completed status, amount/status, type/category, and inclusive date range.
+- **Transaction Summary:** all-record and date-range aggregates. The all-record request stores backend count/expense values for comparison.
+- **AI Tool Calling:** general question, current-month summary, completed status, amount threshold, date-range summary, an intentionally high threshold with no matches, unsupported account-balance question, and a structured-value comparison. The AI checks assert response shape/data, not exact prose.
+- **Validation and Error Handling:** blank/missing question, invalid status/range, missing transaction, and an optional Ollama outage test. Stop Ollama before running the outage request; restart it afterward.
+- **Security Tests:** makes an unauthenticated request and expects the current public behavior (`200`). This demonstrates the security gap; it is not evidence that access is secured. A 401/403 or cross-user test requires an authentication/ownership model that does not currently exist.
+
+To compare financial figures, run **Transaction Summary → Summary for all transactions**, then **AI Tool Calling → Ask - compare exact summary to backend reference**. The second request checks structured counts and totals only; model wording is intentionally not asserted. For questions that require newly created records, create suitable synthetic data first. Empty/no-match examples are based on the stated filter and should produce empty structured evidence.
 
 ## Tests
 
@@ -351,4 +443,4 @@ Set-Location .\FinAssist
 .\mvnw.cmd test
 ```
 
-The tests cover the MVC request/response behavior, validation, invalid enum filters, not-found responses, CRUD service operations, filtering inputs, invalid amount/pagination ranges, summary metrics and category totals, empty summaries, date-range behavior, summary route mapping, AI question validation, prompt forwarding, and model failure handling. They mock AI/database dependencies and do not require MySQL or Ollama; the running application requires MySQL, and `/api/ask` requires Ollama.
+The tests cover MVC request/response behavior, validation, invalid enum filters, not-found responses, CRUD service operations, filtering inputs, invalid amount/pagination ranges, summary metrics and category totals, empty summaries, date-range behavior, summary route mapping, AI question validation, prompt forwarding, approved tool registration, tool argument validation, bounded result size, backend summary data, empty-result grounding, and model/tool failure handling. They mock AI/database dependencies and do not require MySQL or Ollama. The running application requires MySQL; `/api/ask` requires Ollama. No live Ollama/MySQL integration test is part of the Maven suite.

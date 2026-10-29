@@ -2,324 +2,381 @@
   "info": {
     "_postman_id": "a78c2b15-599a-49d2-a03d-a8262534995f",
     "name": "FinAssist AI API Tests",
-    "description": "Postman requests for the local AI question endpoint and implemented transaction APIs.",
+    "description": "Requests for the implemented transaction and AI APIs. Uses synthetic/demo data only. Current application has no authentication; all routes are public/shared.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:8080"
-    },
-    {
-      "key": "transactionId",
-      "value": "1"
-    }
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "transactionId", "value": "1" },
+    { "key": "backendTotalTransactions", "value": "" },
+    { "key": "backendTotalExpenses", "value": "" }
   ],
   "item": [
     {
-      "name": "AI Ask API",
+      "name": "Transaction CRUD",
       "item": [
         {
-          "name": "Ask - saving and investing",
+          "name": "Create transaction (stores transactionId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Created with 201', function () { pm.response.to.have.status(201); });",
+                  "const body = pm.response.json();",
+                  "pm.test('Response contains transaction fields', function () { pm.expect(body).to.have.property('id'); pm.expect(body).to.have.property('amount'); pm.expect(body).to.have.property('createdAt'); });",
+                  "pm.collectionVariables.set('transactionId', body.id);",
+                  "pm.test('Location header references created transaction', function () { pm.expect(pm.response.headers.get('Location')).to.include('/api/transactions/' + body.id); });"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"question\": \"Explain the difference between saving and investing.\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "raw": "{\n  \"transactionType\": \"EXPENSE\",\n  \"amount\": 42.75,\n  \"category\": \"FOOD\",\n  \"merchant\": \"Demo Cafe\",\n  \"description\": \"Synthetic lunch record\",\n  \"transactionDate\": \"2026-10-24T12:30:00\",\n  \"status\": \"COMPLETED\"\n}",
+              "options": { "raw": { "language": "json" } }
             },
-            "url": {
-              "raw": "{{baseUrl}}/api/ask"
-            }
+            "url": { "raw": "{{baseUrl}}/api/transactions" },
+            "description": "Creates one synthetic expense. Set transactionId automatically for later get/update/delete calls."
           }
         },
         {
-          "name": "Ask - compound interest",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Get transaction by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Found with 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response ID matches requested ID', function () { pm.expect(String(pm.response.json().id)).to.eql(pm.collectionVariables.get('transactionId')); });"
+                ]
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"question\": \"What is compound interest?\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/ask"
             }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/transactions/{{transactionId}}" }
           }
         },
         {
-          "name": "Ask - monthly budgeting",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Update transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Updated with 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Updated values are returned', function () { const body = pm.response.json(); pm.expect(body.status).to.eql('COMPLETED'); pm.expect(Number(body.amount)).to.eql(48.25); });"
+                ]
               }
-            ],
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"question\": \"How can I create a monthly budget?\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "raw": "{\n  \"transactionType\": \"EXPENSE\",\n  \"amount\": 48.25,\n  \"category\": \"FOOD\",\n  \"merchant\": \"Demo Cafe\",\n  \"description\": \"Updated synthetic lunch record\",\n  \"transactionDate\": \"2026-10-24T12:30:00\",\n  \"status\": \"COMPLETED\"\n}",
+              "options": { "raw": { "language": "json" } }
             },
-            "url": {
-              "raw": "{{baseUrl}}/api/ask"
-            }
+            "url": { "raw": "{{baseUrl}}/api/transactions/{{transactionId}}" }
           }
         },
         {
-          "name": "Ask - transaction data unavailable",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Delete transaction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Deleted with 204 and no response body', function () { pm.response.to.have.status(204); pm.expect(pm.response.text()).to.eql(''); });"]
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"question\": \"How much did I spend this month?\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/ask"
             }
-          }
-        },
-        {
-          "name": "Validation - empty question",
+          ],
           "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"question\": \"\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/ask"
-            }
-          }
-        },
-        {
-          "name": "Validation - whitespace question",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"question\": \"   \"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/ask"
-            }
-          }
-        },
-        {
-          "name": "Validation - missing question",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/ask"
-            }
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/transactions/{{transactionId}}" }
           }
         }
       ]
     },
     {
-      "name": "Transaction APIs",
+      "name": "Transaction Search and Filters",
       "item": [
         {
-          "name": "Create transaction",
+          "name": "List transactions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('List returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Page response shape is present', function () { const body = pm.response.json(); pm.expect(body.content).to.be.an('array'); pm.expect(body).to.have.property('page'); pm.expect(body).to.have.property('size'); pm.expect(body).to.have.property('totalElements'); pm.expect(body).to.have.property('totalPages'); pm.expect(body).to.have.property('last'); });"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions?page=0&size=20" } }
+        },
+        {
+          "name": "Filter by completed status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Status filter returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Every result is completed', function () { pm.response.json().content.forEach(function (item) { pm.expect(item.status).to.eql('COMPLETED'); }); });"]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions?status=COMPLETED" } }
+        },
+        {
+          "name": "Filter by amount and status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Combined filter returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Returned records satisfy amount and status', function () { pm.response.json().content.forEach(function (item) { pm.expect(item.status).to.eql('COMPLETED'); pm.expect(Number(item.amount)).to.be.at.least(100); pm.expect(Number(item.amount)).to.be.at.most(5000); }); });"]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions?minAmount=100&maxAmount=5000&status=COMPLETED" } }
+        },
+        {
+          "name": "Filter by type and category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Type/category filter returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Returned records satisfy both filters', function () { pm.response.json().content.forEach(function (item) { pm.expect(item.transactionType).to.eql('EXPENSE'); pm.expect(item.category).to.eql('FOOD'); }); });"]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions?transactionType=EXPENSE&category=FOOD" } }
+        },
+        {
+          "name": "Filter by inclusive date range",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Date filter returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Page response contains a list', function () { pm.expect(pm.response.json().content).to.be.an('array'); });"]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions?startDate=2026-10-01T00:00:00&endDate=2026-10-31T23:59:59" } }
+        }
+      ]
+    },
+    {
+      "name": "Transaction Summary",
+      "item": [
+        {
+          "name": "Summary for all transactions (stores accuracy reference)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Summary returns 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('Summary has backend statistics', function () { pm.expect(body.totalIncome).to.not.eql(undefined); pm.expect(body.totalExpenses).to.not.eql(undefined); pm.expect(body.netBalance).to.not.eql(undefined); pm.expect(body.totalTransactions).to.be.a('number'); pm.expect(body.completedTransactions).to.be.a('number'); pm.expect(body.expenseTotalsByCategory).to.be.an('array'); pm.expect(body.incomeTotalsByCategory).to.be.an('array'); });",
+                  "pm.collectionVariables.set('backendTotalTransactions', body.totalTransactions);",
+                  "pm.collectionVariables.set('backendTotalExpenses', String(body.totalExpenses));"
+                ]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions/summary" } }
+        },
+        {
+          "name": "Summary for date range",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Date summary returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Summary contains date-filtered totals', function () { const body = pm.response.json(); pm.expect(body.totalTransactions).to.be.a('number'); pm.expect(body.totalIncome).to.not.eql(undefined); pm.expect(body.totalExpenses).to.not.eql(undefined); });"]
+              }
+            }
+          ],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions/summary?startDate=2026-10-01T00:00:00&endDate=2026-10-31T23:59:59" } }
+        }
+      ]
+    },
+    {
+      "name": "AI Tool Calling",
+      "item": [
+        {
+          "name": "General financial question",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('General ask returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Question and answer are returned', function () { const body = pm.response.json(); pm.expect(body.question).to.eql('What is compound interest?'); pm.expect(body.answer).to.be.a('string').and.not.empty; });"]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"question\": \"What is compound interest?\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/ask" }
+          }
+        },
+        {
+          "name": "Ask - current-month spending",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Current-month ask returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Structured backend statistics are returned', function () { const body = pm.response.json(); pm.expect(body.data.summary.statistics.totalExpenses).to.not.eql(undefined); pm.expect(body.data.summary.statistics.totalTransactions).to.be.a('number'); pm.expect(body.data.search).to.eql(null); });"]
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transactionType\": \"EXPENSE\",\n  \"amount\": 42.75,\n  \"category\": \"FOOD\",\n  \"merchant\": \"Harbor Cafe\",\n  \"description\": \"Lunch\",\n  \"transactionDate\": \"2026-10-24T12:30:00\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
+            }
+          ],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"How much did I spend this month?\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{baseUrl}}/api/ask" }, "description": "The backend computes calendar-month bounds using FINASSIST_REPORTING_ZONE (UTC by default). Check data.summary.statistics.totalExpenses, not just the prose." }
+        },
+        {
+          "name": "Ask - status filter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Status ask returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Search evidence is structured and bounded', function () { const body = pm.response.json(); pm.expect(body.data.search.totalMatches).to.be.a('number'); pm.expect(body.data.search.returnedCount).to.be.at.most(20); pm.response.json().data.search.transactions.forEach(function (item) { pm.expect(item.status).to.eql('COMPLETED'); }); });"]
               }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions"
             }
-          }
+          ],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Show my completed transactions\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{baseUrl}}/api/ask" } }
         },
         {
-          "name": "List transactions",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions"
-            }
-          }
-        },
-        {
-          "name": "Filter transactions - amount and status",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions?minAmount=100&maxAmount=5000&status=COMPLETED"
-            }
-          }
-        },
-        {
-          "name": "Filter transactions - type and category",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions?transactionType=EXPENSE&category=FOOD"
-            }
-          }
-        },
-        {
-          "name": "Filter transactions - date range",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions?startDate=2026-10-01T00:00:00&endDate=2026-10-27T23:59:59"
-            }
-          }
-        },
-        {
-          "name": "Get transaction by ID",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions/{{transactionId}}"
-            }
-          }
-        },
-        {
-          "name": "Update transaction",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "name": "Ask - inclusive minimum amount",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Amount ask returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Search evidence respects the inclusive threshold', function () { const data = pm.response.json().data.search; pm.expect(data.returnedCount).to.be.at.most(20); data.transactions.forEach(function (item) { pm.expect(Number(item.amount)).to.be.at.least(5000); }); });"]
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transactionType\": \"EXPENSE\",\n  \"amount\": 48.25,\n  \"category\": \"FOOD\",\n  \"merchant\": \"Harbor Cafe\",\n  \"description\": \"Updated lunch total\",\n  \"transactionDate\": \"2026-10-24T12:30:00\",\n  \"status\": \"COMPLETED\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
+            }
+          ],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Find transactions with an amount of at least 5000\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{baseUrl}}/api/ask" }, "description": "The supported minAmount filter is inclusive; strict greater-than is not separately implemented." }
+        },
+        {
+          "name": "Ask - date range",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Date-range ask returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Summary includes structured statistics', function () { pm.expect(pm.response.json().data.summary.statistics.totalTransactions).to.be.a('number'); });"]
               }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions/{{transactionId}}"
             }
-          }
+          ],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Summarize transactions between 2026-10-01T00:00:00 and 2026-10-31T23:59:59\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{baseUrl}}/api/ask" } }
         },
         {
-          "name": "Delete transaction",
-          "request": {
-            "method": "DELETE",
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions/{{transactionId}}"
+          "name": "Ask - no matches",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('No-match ask returns 200', function () { pm.response.to.have.status(200); });", "pm.test('No-match evidence is zero and answer is truthful', function () { const body = pm.response.json(); pm.expect(body.data.search.totalMatches).to.eql(0); pm.expect(body.data.search.transactions).to.be.empty; pm.expect(body.answer).to.eql('No transactions matched the requested filters.'); });"]
+              }
             }
-          }
+          ],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Find transactions above 999999999999\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{baseUrl}}/api/ask" }, "description": "Uses a deliberately high supported amount threshold to demonstrate an empty result set." }
         },
         {
-          "name": "Summary - all transactions",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions/summary"
+          "name": "Ask - unsupported account balance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Unsupported personal account query returns 200', function () { pm.response.to.have.status(200); });", "pm.test('No backend data is claimed', function () { const body = pm.response.json(); pm.expect(body.data).to.eql(null); pm.expect(body.answer).to.include('could not map'); });"]
+              }
             }
-          }
+          ],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"What is my bank account balance?\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{baseUrl}}/api/ask" } }
         },
         {
-          "name": "Summary - inclusive date range",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions/summary?startDate=2026-10-01T00:00:00&endDate=2026-10-27T23:59:59"
+          "name": "Ask - compare exact summary to backend reference",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Ask summary response returns 200', function () { pm.response.to.have.status(200); });",
+                  "const stats = pm.response.json().data.summary.statistics;",
+                  "pm.test('AI summary values exactly match preceding GET summary', function () { if (pm.collectionVariables.get('backendTotalTransactions') !== '') { pm.expect(String(stats.totalTransactions)).to.eql(String(pm.collectionVariables.get('backendTotalTransactions'))); pm.expect(String(stats.totalExpenses)).to.eql(pm.collectionVariables.get('backendTotalExpenses')); } });"
+                ]
+              }
             }
-          }
+          ],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"Summarize all my transactions\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{baseUrl}}/api/ask" }, "description": "Run after Transaction Summary > Summary for all transactions. The test compares structured values only, not LLM prose." }
+        }
+      ]
+    },
+    {
+      "name": "Validation and Error Handling",
+      "item": [
+        {
+          "name": "Ask - blank question (400)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Blank question returns 400', function () { pm.response.to.have.status(400); });", "pm.test('Validation identifies question', function () { pm.expect(pm.response.json().details.question).to.eql('question must not be blank'); });"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"   \"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{baseUrl}}/api/ask" } }
         },
         {
-          "name": "Summary - invalid date range",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/api/transactions/summary?startDate=2026-10-28T00:00:00&endDate=2026-10-27T23:59:59"
-            }
-          }
+          "name": "Ask - missing question (400)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Missing question returns 400', function () { pm.response.to.have.status(400); });", "pm.test('Validation identifies question', function () { pm.expect(pm.response.json().details.question).to.eql('question must not be blank'); });"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{baseUrl}}/api/ask" } }
+        },
+        {
+          "name": "Invalid status filter (400)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Invalid enum returns 400', function () { pm.response.to.have.status(400); });", "pm.test('Allowed values are explained', function () { pm.expect(pm.response.json().details.status).to.include('COMPLETED'); });"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions?status=UNKNOWN" } }
+        },
+        {
+          "name": "Invalid amount range (400)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Invalid amount range returns 400', function () { pm.response.to.have.status(400); });"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions?minAmount=600&maxAmount=500" } }
+        },
+        {
+          "name": "Missing transaction (404)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Unknown ID returns 404', function () { pm.response.to.have.status(404); });", "pm.test('Error body is consistent', function () { pm.expect(pm.response.json()).to.have.property('message'); });"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions/999999999" } }
+        },
+        {
+          "name": "Ollama unavailable (503; stop Ollama first)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('AI outage returns 503', function () { pm.response.to.have.status(503); });", "pm.test('Error does not expose infrastructure details', function () { const text = pm.response.text(); pm.expect(text).not.to.include('localhost:11434'); pm.expect(text).not.to.include('password'); });"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"question\": \"What is compound interest?\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{baseUrl}}/api/ask" }, "description": "Optional manual failure test: stop Ollama, run this request, then restart Ollama. Do not expect this request to pass while Ollama is healthy." }
+        }
+      ]
+    },
+    {
+      "name": "Security Tests",
+      "description": "No authentication or authorization mechanism currently exists. These requests document the present public behavior; they do not prove data isolation.",
+      "item": [
+        {
+          "name": "Unauthenticated list is currently public (security gap)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Current API responds without authentication', function () { pm.response.to.have.status(200); });"] } }],
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions" }, "description": "This succeeding unauthenticated request confirms the current limitation. No 401/403 or cross-user tests are possible until an identity and ownership model are implemented." }
         }
       ]
     }
