@@ -1,5 +1,6 @@
 package com.FinAssist.FinAssist.transaction.controller;
 
+import com.FinAssist.FinAssist.ask.service.AskServiceException;
 import com.FinAssist.FinAssist.transaction.service.TransactionNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -27,6 +28,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TransactionNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(TransactionNotFoundException exception) {
         return response(HttpStatus.NOT_FOUND, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(AskServiceException.class)
+    public ResponseEntity<ApiError> handleAskServiceFailure(AskServiceException exception) {
+        logger.warn("AI answer generation failed", exception);
+        return response(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "The AI service is currently unavailable. Please try again later.",
+                Map.of()
+        );
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
