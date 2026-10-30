@@ -49,7 +49,7 @@ class AskControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.question")
-                        .value("Explain the difference between saving and investing."))
+                  .value("Explain the difference between saving and investing."))
                 .andExpect(jsonPath("$.answer")
                         .value("Saving prioritizes access; investing seeks long-term growth."))
                 .andExpect(jsonPath("$.data").doesNotExist());

@@ -84,7 +84,7 @@ class TransactionControllerTest {
         mockMvc.perform(post("/api/transactions")
                         .contentType("application/json")
                         .content("""
-                                {
+                         {
                                   "transactionType": "EXPENSE",
                                   "amount": 42.755,
                                   "category": "FOOD",

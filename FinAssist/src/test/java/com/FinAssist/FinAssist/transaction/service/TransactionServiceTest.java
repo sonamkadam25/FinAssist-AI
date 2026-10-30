@@ -7,7 +7,7 @@ import com.FinAssist.FinAssist.transaction.entity.Transaction;
 import com.FinAssist.FinAssist.transaction.entity.TransactionStatus;
 import com.FinAssist.FinAssist.transaction.entity.TransactionType;
 import com.FinAssist.FinAssist.transaction.repository.CategoryTransactionAggregate;
-import com.FinAssist.FinAssist.transaction.repository.TransactionRepository;
+import com.FinAssist.FinAssist.transaction.repository.TransactionRepository; 
 import com.FinAssist.FinAssist.transaction.repository.TransactionSummaryAggregate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
