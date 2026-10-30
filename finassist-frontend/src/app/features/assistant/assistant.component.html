@@ -1,0 +1,82 @@
+<section class="page-heading assistant-page-heading">
+  <div>
+    <p class="eyebrow">FINASSIST AI</p>
+    <h1>Ask your assistant<span class="heading-period">.</span></h1>
+    <p class="page-subtitle">Get answers grounded in the transactions recorded in this demo workspace.</p>
+  </div>
+  <div class="ai-status"><span class="ai-spark" aria-hidden="true">✦</span><span><strong>AI assistant</strong><small>Powered by local Ollama</small></span></div>
+</section>
+
+<section class="assistant-shell">
+  @if (messages.length === 0) {
+    <div class="assistant-welcome">
+      <div class="assistant-orb" aria-hidden="true">✦</div>
+      <p class="eyebrow">YOUR FINANCIAL WORKSPACE</p>
+      <h2>What would you like to understand?</h2>
+      <p>Ask about transaction totals, dates, status, or recorded activity. Financial figures come from the backend summary service.</p>
+      <div class="suggestion-grid">
+        @for (suggestion of suggestions; track suggestion) {
+          <button type="button" class="suggestion-card" [disabled]="loading" (click)="submit(suggestion)">
+            <span>{{ suggestion }}</span><span class="suggestion-arrow" aria-hidden="true">↗</span>
+          </button>
+        }
+      </div>
+    </div>
+  } @else {
+    <div class="conversation" aria-live="polite" aria-label="Conversation">
+      @for (message of messages; track $index) {
+        <article class="message" [class.user-message]="message.role === 'user'" [class.assistant-message]="message.role === 'assistant'">
+          @if (message.role === 'assistant') { <div class="message-avatar" aria-hidden="true">✦</div> }
+          <div class="message-content">
+            <div class="message-meta">{{ message.role === 'user' ? 'You' : 'FinAssist AI' }}</div>
+            <div class="message-bubble" [class.message-error]="message.failed">{{ message.text }}</div>
+            @if (message.failed) {
+              <button type="button" class="text-button retry-button" (click)="retry()">Retry question</button>
+            }
+            @if (message.response?.data?.summary; as summaryData) {
+              <section class="evidence-card" aria-label="Backend transaction summary">
+                <div class="evidence-heading"><span>Backend summary</span><small>{{ summaryData.startDate | date:'MMM d, y' }} – {{ summaryData.endDate | date:'MMM d, y' }}</small></div>
+                <div class="evidence-grid">
+                  <div><small>Expenses</small><strong>{{ summaryData.statistics.totalExpenses | number:'1.2-2' }}</strong></div>
+                  <div><small>Income</small><strong>{{ summaryData.statistics.totalIncome | number:'1.2-2' }}</strong></div>
+                  <div><small>Transactions</small><strong>{{ summaryData.statistics.totalTransactions | number }}</strong></div>
+                  <div><small>Net total</small><strong>{{ summaryData.statistics.netBalance | number:'1.2-2' }}</strong></div>
+                </div>
+                <p class="evidence-footnote">Net is completed income minus completed expenses; it is not an account balance.</p>
+              </section>
+            }
+            @if (message.response?.data?.search; as searchData) {
+              <section class="evidence-card" aria-label="Backend transaction search results">
+                <div class="evidence-heading"><span>Matching transactions</span><small>{{ searchData.totalMatches }} match{{ searchData.totalMatches === 1 ? '' : 'es' }} · {{ searchData.returnedCount }} shown</small></div>
+                @if (searchData.transactions.length === 0) {
+                  <p class="inline-empty evidence-empty">No transactions matched the requested filters.</p>
+                } @else {
+                  <div class="evidence-list">
+                    @for (transaction of searchData.transactions; track transaction.id) {
+                      <div class="evidence-transaction">
+                        <span><strong>{{ transaction.category }}</strong><small>{{ transaction.transactionDate | date:'MMM d, y' }} · {{ transaction.status }}</small></span>
+                        <strong>{{ transaction.transactionType === 'INCOME' ? '+' : '−' }}{{ transaction.amount | number:'1.2-2' }}</strong>
+                      </div>
+                    }
+                  </div>
+                }
+                @if (searchData.truncated) { <p class="evidence-footnote">Showing the first {{ searchData.returnedCount }} results of {{ searchData.totalMatches }}. Narrow your filters to see a smaller set.</p> }
+              </section>
+            }
+          </div>
+          @if (message.role === 'user') { <div class="user-avatar" aria-hidden="true">You</div> }
+        </article>
+      }
+      @if (loading) {
+        <div class="message assistant-message"><div class="message-avatar" aria-hidden="true">✦</div><div class="message-content"><div class="message-meta">FinAssist AI</div><div class="message-bubble typing"><span></span><span></span><span></span> Thinking through your question…</div></div></div>
+      }
+    </div>
+  }
+
+  <form class="composer" (ngSubmit)="submit()">
+    <label class="visually-hidden" for="assistant-question">Ask a financial question</label>
+    <textarea #questionInput id="assistant-question" [formControl]="question" (keydown)="onKeydown($event)" rows="1" maxlength="1000" placeholder="Ask a question about your transactions…" [attr.aria-invalid]="question.touched && question.invalid"></textarea>
+    <div class="composer-footer"><span>Enter to send · Shift + Enter for a new line</span><button class="button button-primary send-button" type="submit" [disabled]="loading || !question.value.trim()"><span>{{ loading ? 'Sending…' : 'Send' }}</span><span aria-hidden="true">↑</span></button></div>
+  </form>
+</section>
+<p class="assistant-disclaimer"><span aria-hidden="true">ⓘ</span> Demo data only. AI explanations can vary; structured backend figures are the source of truth. No bank account is connected.</p>

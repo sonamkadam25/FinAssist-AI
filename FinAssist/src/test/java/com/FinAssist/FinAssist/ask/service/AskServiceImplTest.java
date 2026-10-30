@@ -1,27 +1,36 @@
 package com.FinAssist.FinAssist.ask.service;
 
 import com.FinAssist.FinAssist.ask.dto.AskResult;
+import com.FinAssist.FinAssist.transaction.dto.TransactionResponse;
 import com.FinAssist.FinAssist.transaction.dto.TransactionSummaryResponse;
+import com.FinAssist.FinAssist.transaction.entity.TransactionStatus;
+import com.FinAssist.FinAssist.transaction.entity.TransactionType;
 import com.FinAssist.FinAssist.transaction.service.TransactionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,14 +67,9 @@ class AskServiceImplTest {
     }
 
     @Test
-    void sendsActualQuestionAndConfiguredSystemInstruction() {
+    void sendsGeneralQuestionWithoutRegisteringUnsupportedModelTools() {
         String question = "What is compound interest?";
-        when(chatClient.prompt()).thenReturn(requestSpec);
-        when(requestSpec.tools(any(Object[].class))).thenReturn(requestSpec);
-        when(requestSpec.user(question)).thenReturn(requestSpec);
-        when(requestSpec.system(anyString())).thenReturn(requestSpec);
-        when(requestSpec.call()).thenReturn(responseSpec);
-        when(responseSpec.content()).thenReturn("Interest earned on prior interest.");
+        stubModelResponse(question, "Interest earned on prior interest.");
 
         AskResult result = askService.ask(question);
 
@@ -73,6 +77,7 @@ class AskServiceImplTest {
         assertNull(result.data());
         verify(chatClientBuilder).defaultSystem(AskServiceImpl.SYSTEM_INSTRUCTION);
         verify(requestSpec).user(question);
+        verify(requestSpec, never()).tools(any(Object[].class));
     }
 
     @Test
@@ -91,114 +96,158 @@ class AskServiceImplTest {
 
     @Test
     void rejectsBlankModelResponseInsteadOfReturningSuccess() {
-        when(chatClient.prompt()).thenReturn(requestSpec);
-        when(requestSpec.tools(any(Object[].class))).thenReturn(requestSpec);
-        when(requestSpec.user("What is a budget?")).thenReturn(requestSpec);
-        when(requestSpec.system(anyString())).thenReturn(requestSpec);
-        when(requestSpec.call()).thenReturn(responseSpec);
-        when(responseSpec.content()).thenReturn("  ");
+        stubModelResponse("What is a budget?", "  ");
 
         assertThrows(AskServiceException.class, () -> askService.ask("What is a budget?"));
     }
 
     @Test
-    void registersToolsAndReturnsExactBackendSummaryAsStructuredData() {
+    void getsCurrentMonthSummaryBeforePassingBackendDataToModel() {
         String question = "How much did I spend this month?";
-        TransactionSummaryResponse summary = new TransactionSummaryResponse(
-                new BigDecimal("1250.00"),
-                new BigDecimal("450.25"),
-                new BigDecimal("799.75"),
-                3,
-                2,
-                1,
-                0,
-                List.of(),
-                List.of()
-        );
+        TransactionSummaryResponse summary = summary("1250.00", "450.25", "799.75", 3);
         when(transactionService.summarize(
-                java.time.LocalDateTime.parse("2026-10-01T00:00"),
-                java.time.LocalDateTime.parse("2026-10-31T23:59:59.999999")))
+                LocalDateTime.parse("2026-10-01T00:00"),
+                LocalDateTime.parse("2026-10-31T23:59:59.999999")))
                 .thenReturn(summary);
-        AtomicReference<Object[]> registeredTools = new AtomicReference<>();
-        when(chatClient.prompt()).thenReturn(requestSpec);
-        when(requestSpec.tools(any(Object[].class))).thenAnswer(invocation -> {
-            registeredTools.set(new Object[]{invocation.getArgument(0, TransactionDataTools.class)});
-            return requestSpec;
-        });
-        when(requestSpec.user(question)).thenReturn(requestSpec);
-        when(requestSpec.system(anyString())).thenReturn(requestSpec);
-        when(requestSpec.call()).thenAnswer(invocation -> {
-            TransactionDataTools tools = (TransactionDataTools) registeredTools.get()[0];
-            tools.getCurrentMonthTransactionSummary();
-            return responseSpec;
-        });
-        when(responseSpec.content()).thenReturn("Backend summary reports expenses of 450.25.");
+        stubModelResponse(question, "The backend summary reports expenses of 450.25.");
 
         AskResult result = askService.ask(question);
 
-        assertEquals("Backend summary reports expenses of 450.25.", result.answer());
+        assertEquals("The backend summary reports expenses of 450.25.", result.answer());
         assertEquals(new BigDecimal("450.25"), result.data().summary().statistics().totalExpenses());
-        assertEquals(java.time.LocalDateTime.parse("2026-10-01T00:00"),
-                result.data().summary().startDate());
         verify(transactionService).summarize(
-                java.time.LocalDateTime.parse("2026-10-01T00:00"),
-                java.time.LocalDateTime.parse("2026-10-31T23:59:59.999999")
+                LocalDateTime.parse("2026-10-01T00:00"),
+                LocalDateTime.parse("2026-10-31T23:59:59.999999")
         );
+        ArgumentCaptor<String> systemContext = ArgumentCaptor.forClass(String.class);
+        verify(requestSpec).system(systemContext.capture());
+        assertTrue(systemContext.getValue().contains("Validated transaction data from the backend"));
+        assertTrue(systemContext.getValue().contains("totalExpenses=450.25"));
+        verify(requestSpec, never()).tools(any(Object[].class));
     }
 
     @Test
-    void doesNotTrustAnAnswerToPersonalTransactionQuestionWithoutToolResult() {
-        when(chatClient.prompt()).thenReturn(requestSpec);
-        when(requestSpec.user("How much did I spend this month?")).thenReturn(requestSpec);
-        when(requestSpec.system(anyString())).thenReturn(requestSpec);
-        when(requestSpec.tools(any(Object[].class))).thenReturn(requestSpec);
-        when(requestSpec.call()).thenReturn(responseSpec);
-        when(responseSpec.content()).thenReturn("You spent 99.00 this month.");
+    void answersTransactionCountFromBackendSummary() {
+        String question = "How many transactions are recorded?";
+        when(transactionService.summarize(null, null))
+                .thenReturn(summary("0.00", "0.00", "0.00", 4));
+        stubModelResponse(question, "The backend summary contains four transactions.");
 
-        AskResult result = askService.ask("How much did I spend this month?");
+        AskResult result = askService.ask(question);
+
+        assertEquals(4, result.data().summary().statistics().totalTransactions());
+        verify(transactionService).summarize(null, null);
+    }
+
+    @Test
+    void searchesBackendForStatusQuestion() {
+        String question = "Show my completed transactions";
+        TransactionResponse record = transaction(1L, new BigDecimal("24.50"), TransactionStatus.COMPLETED);
+        when(transactionService.findAll(
+                any(), any(), eq(TransactionStatus.COMPLETED), any(), any(), any(), any(), eq(0), eq(20)))
+                .thenReturn(new PageImpl<>(List.of(record), PageRequest.of(0, 20), 1));
+        stubModelResponse(question, "One completed transaction was found.");
+
+        AskResult result = askService.ask(question);
+
+        assertEquals(1, result.data().search().totalMatches());
+        assertEquals(TransactionStatus.COMPLETED, result.data().search().transactions().getFirst().status());
+        verify(transactionService).findAll(
+                any(), any(), eq(TransactionStatus.COMPLETED), any(), any(), any(), any(), eq(0), eq(20));
+    }
+
+    @Test
+    void translatesStrictAboveThresholdToSupportedInclusiveAmountFilter() {
+        String question = "Find transactions above 5000";
+        when(transactionService.findAll(
+                eq(new BigDecimal("5000.01")), any(), any(), any(), any(), any(), any(), eq(0), eq(20)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+        stubModelResponse(question, "No transactions matched.");
+
+        AskResult result = askService.ask(question);
+
+        assertEquals("No transactions matched the requested filters.", result.answer());
+        verify(transactionService).findAll(
+                eq(new BigDecimal("5000.01")), any(), any(), any(), any(), any(), any(), eq(0), eq(20));
+    }
+
+    @Test
+    void doesNotAskModelToGuessUnsupportedPersonalFinancialData() {
+        AskResult result = askService.ask("What is my bank account balance?");
 
         assertEquals(
                 "I could not map that transaction question to a supported query. Please specify a transaction status, type, category, amount threshold, or date range.",
                 result.answer()
         );
         assertNull(result.data());
+        verify(chatClient, never()).prompt();
     }
 
     @Test
     void emptyBackendSummaryOverridesAnUnsupportedModelClaim() {
         String question = "How much did I spend this month?";
-        TransactionSummaryResponse emptySummary = new TransactionSummaryResponse(
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                0,
-                0,
-                0,
-                0,
-                List.of(),
-                List.of()
-        );
         when(transactionService.summarize(
-                java.time.LocalDateTime.parse("2026-10-01T00:00"),
-                java.time.LocalDateTime.parse("2026-10-31T23:59:59.999999")))
-                .thenReturn(emptySummary);
-        AtomicReference<TransactionDataTools> registeredTools = new AtomicReference<>();
-        when(chatClient.prompt()).thenReturn(requestSpec);
-        when(requestSpec.tools(any(Object[].class))).thenAnswer(invocation -> {
-            registeredTools.set(invocation.getArgument(0, TransactionDataTools.class));
-            return requestSpec;
-        });
-        when(requestSpec.system(anyString())).thenReturn(requestSpec);
-        when(requestSpec.user(question)).thenReturn(requestSpec);
-        when(requestSpec.call()).thenAnswer(invocation -> {
-            registeredTools.get().getCurrentMonthTransactionSummary();
-            return responseSpec;
-        });
-        when(responseSpec.content()).thenReturn("You spent 450.25.");
+                LocalDateTime.parse("2026-10-01T00:00"),
+                LocalDateTime.parse("2026-10-31T23:59:59.999999")))
+                .thenReturn(summary("0.00", "0.00", "0.00", 0));
+        stubModelResponse(question, "You spent 450.25.");
 
         AskResult result = askService.ask(question);
 
         assertEquals("No transactions were recorded in the requested date range.", result.answer());
         assertEquals(0, result.data().summary().statistics().totalTransactions());
+    }
+
+    @Test
+    void summarizesAnExplicitDateRangeThroughTheBackend() {
+        String question = "Summarize transactions between 2026-10-01T00:00:00 and 2026-10-25T23:59:59";
+        when(transactionService.summarize(
+                LocalDateTime.parse("2026-10-01T00:00:00"),
+                LocalDateTime.parse("2026-10-25T23:59:59")))
+                .thenReturn(summary("100.00", "20.00", "80.00", 2));
+        stubModelResponse(question, "The backend summary reports two transactions.");
+
+        AskResult result = askService.ask(question);
+
+        assertEquals(2, result.data().summary().statistics().totalTransactions());
+        verify(transactionService).summarize(
+                LocalDateTime.parse("2026-10-01T00:00:00"),
+                LocalDateTime.parse("2026-10-25T23:59:59"));
+    }
+
+    private void stubModelResponse(String question, String answer) {
+        when(chatClient.prompt()).thenReturn(requestSpec);
+        when(requestSpec.system(anyString())).thenReturn(requestSpec);
+        when(requestSpec.user(question)).thenReturn(requestSpec);
+        when(requestSpec.call()).thenReturn(responseSpec);
+        when(responseSpec.content()).thenReturn(answer);
+    }
+
+    private TransactionSummaryResponse summary(String income, String expenses, String net, long count) {
+        return new TransactionSummaryResponse(
+                new BigDecimal(income),
+                new BigDecimal(expenses),
+                new BigDecimal(net),
+                count,
+                count,
+                0,
+                0,
+                List.of(),
+                List.of()
+        );
+    }
+
+    private TransactionResponse transaction(Long id, BigDecimal amount, TransactionStatus status) {
+        return new TransactionResponse(
+                id,
+                TransactionType.EXPENSE,
+                amount,
+                "FOOD",
+                "Synthetic merchant",
+                "Demo record",
+                LocalDateTime.parse("2026-10-15T12:00:00"),
+                status,
+                LocalDateTime.parse("2026-10-15T12:01:00")
+        );
     }
 }

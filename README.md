@@ -1,6 +1,6 @@
-# FinAssist-AI
+# FinAssist AI
 
-FinAssist AI is a Spring Boot financial transaction analysis assistant. It provides transaction CRUD, filtering, backend-calculated summaries, and an Ollama-backed `/api/ask` endpoint that can use bounded, validated Spring AI tools to query the shared transaction dataset. Use synthetic/demo records only.
+FinAssist AI is a Spring Boot financial transaction analysis assistant. It provides transaction CRUD, filtering, backend-calculated summaries, and an Ollama-backed `/api/ask` endpoint that routes supported questions through bounded, validated backend queries. Use synthetic/demo records only.
 
 ## Current implementation status
 
@@ -13,14 +13,15 @@ FinAssist AI is a Spring Boot financial transaction analysis assistant. It provi
 - Use `BigDecimal` for money and string-backed enums for transaction type and status.
 - Create/update the database schema without dropping existing data.
 - Answer general financial questions through a local Ollama model using Spring AI.
-- Search transactions and obtain backend-calculated transaction summaries through narrowly scoped Spring AI tools.
+- Route supported AI transaction questions through narrowly scoped, validated backend query operations.
 - Return structured backend evidence alongside the AI answer, including bounded transaction results or exact summary statistics.
 - Use a configurable reporting time zone (UTC by default) for "this month" transaction summaries.
+- Responsive Angular dashboard, transaction CRUD/filtering, and AI assistant pages backed by the REST API.
 
 ### Not implemented
 
 - Authentication, authorization, and per-user/tenant transaction isolation.
-- Frontend, bank integrations, conversation memory, embeddings, vector search, or RAG.
+- Bank integrations, conversation memory, embeddings, vector search, or RAG.
 
 **Security limitation:** the API currently has no Spring Security dependency or identity model. Transaction records are shared and the implemented endpoints are unauthenticated. Do not deploy this version with real or private financial information. Authentication and user/tenant scoping must be designed and enforced in backend queries before such use.
 
@@ -29,11 +30,12 @@ FinAssist AI is a Spring Boot financial transaction analysis assistant. It provi
 - Java 21
 - Spring Boot 4.1.1
 - Spring MVC
-- Spring AI 2.0.1 `ChatClient` and tool calling with Ollama
+- Spring AI 2.0.1 `ChatClient` with Ollama
 - Spring Data JPA / Hibernate
 - MySQL
 - Jakarta Bean Validation
 - JUnit 5, Mockito, and Spring Boot MVC test support
+- Angular 19 standalone frontend, TypeScript, RxJS, Reactive Forms, and Jasmine/Karma
 
 ## Prerequisites
 
@@ -88,7 +90,7 @@ $env:OLLAMA_MODEL = "codellama:latest"
 $env:OLLAMA_TEMPERATURE = "0.7"
 ```
 
-The request path is `AskController` → `AskServiceImpl` → Spring AI `ChatClient` → local Ollama. For transaction questions, the model may call only the supplied read-only tools. Tools validate arguments and delegate to the existing `TransactionService`; the service/repository perform the query and all financial calculations. The model cannot access the repository or execute SQL directly. Tool searches return at most 20 minimized records. The API returns backend-derived structured data alongside the generated explanation. If a transaction question does not execute a supported tool, the response states that the request could not be mapped to a supported query. Ollama failures produce a service-unavailable response.
+The normal UI flow is Angular at `http://localhost:4200` → Spring REST API at `http://localhost:8080`. The Angular development server proxies `/api` requests to Spring Boot; no permissive backend CORS policy is added. The AI request path is Angular → `AskController` → `AskServiceImpl` → Spring AI `ChatClient` ↔ local Ollama. The configured `codellama:latest` model supports text completion but does not advertise Ollama tool-calling capability. Therefore, the backend deterministically routes supported transaction questions into the existing validated read-only transaction operations before calling the model. The model receives only the resulting minimized records or backend summary in its prompt; it cannot access repositories or execute SQL. Tool-style searches are capped at 20 records. The API returns exact backend-derived structured data alongside the generated explanation.
 
 ## Run the application
 
@@ -107,6 +109,36 @@ DESCRIBE transactions;
 ```
 
 The `transactions` table stores transaction type and status as readable enum strings. Amounts use `DECIMAL(19,2)`. The `createdAt` timestamp is assigned when a transaction is first persisted and cannot be updated through the API.
+
+## Run the Angular frontend
+
+Prerequisites: Node.js `20.11.1` or newer in the Node 20 line (this workspace uses Node `20.14.0`) and npm. The frontend is in [`finassist-frontend/`](finassist-frontend/), uses Angular 19, and does not add backend dependencies.
+
+Start the backend first as above. Then in a second PowerShell terminal:
+
+```powershell
+Set-Location .\finassist-frontend
+npm install
+npm start
+```
+
+Open `http://localhost:4200`. The Angular dev server sends `/api/**` to `http://localhost:8080` using [`proxy.conf.json`](finassist-frontend/proxy.conf.json), so local development does not require CORS changes. For a separately hosted production frontend, configure a narrow allowed origin in the backend/deployment environment; there is no CORS policy configured in this repository. API base URL is centralized in [`environment.ts`](finassist-frontend/src/environments/environment.ts) and defaults to the same-origin `/api` proxy path.
+
+The UI includes:
+
+- Dashboard cards and recent transactions from the backend summary and paginated list endpoints; totals are not calculated from the visible page.
+- Transaction create/edit forms validated against the real API fields, confirmed deletion, pagination, and supported type/status/category/amount/date filters.
+- An in-memory AI conversation that posts to the backend `/api/ask` endpoint, displays backend summary/search evidence, and does not persist chat history.
+- Loading, empty, retry, and error states. Monetary values are displayed as decimal amounts without a currency symbol because the backend does not define a currency.
+
+Run frontend production build and unit tests from `finassist-frontend`:
+
+```powershell
+npm run build
+npm test -- --watch=false --browsers=ChromeHeadless
+```
+
+The frontend is unauthenticated, just like the current backend. All pages use the shared demo dataset; do not enter real private financial data.
 
 ## REST API
 
@@ -284,18 +316,20 @@ flowchart TD
     AC --> AS[AskServiceImpl]
     AS --> CC[Spring AI ChatClient]
     CC <--> O[Local Ollama model]
-    CC -->|approved tool call only| T[TransactionDataTools]
-    T -->|validated arguments| TS[TransactionService]
+    AS -->|recognized and validated question| T[TransactionDataTools]
+    T --> TS[TransactionService]
     TS --> R[TransactionRepository]
     R --> DB[(MySQL)]
-    DB --> R --> TS --> T --> CC
+    DB --> R --> TS --> T --> AS
+    AS --> CC
+    CC <--> O
     CC --> AS --> AC --> C
     TC[TransactionController] --> TS
 ```
 
 - **Controllers** validate HTTP input and map service results to response DTOs.
-- **AskServiceImpl** owns AI orchestration and creates a per-request tool instance so returned data and tool state cannot leak across requests.
-- **TransactionDataTools** exposes only read-only, explicitly annotated operations; it validates enum, amount, date, and range arguments and caps search output at 20.
+- **AskServiceImpl** owns AI orchestration and creates a per-request transaction-query helper so returned data and query state cannot leak across requests.
+- **TransactionDataTools** contains only read-only operations; it validates enum, amount, date, and range inputs and caps search output at 20.
 - **TransactionService** is the shared business layer for CRUD, specifications, pagination, and database-side summaries.
 - **TransactionRepository/MySQL** execute parameterized Spring Data JPA queries and aggregates; the model has no direct database access.
 - **GlobalExceptionHandler** maps validation, missing resources, model failures, and tool failures into the common error structure without returning internal exception details.
@@ -304,7 +338,8 @@ flowchart TD
 ### Design trade-offs and limitations
 
 - Financial totals are calculated with backend `BigDecimal`/database aggregates to avoid asking the LLM to perform arithmetic.
-- Deterministic database filters remain the source of truth for structured questions; AI tool arguments are validated independently before service execution.
+- Deterministic database filters remain the source of truth for structured questions; recognized natural-language constraints are validated before service execution.
+- The current Codellama build has no Ollama tool-calling capability. Instead of attaching unsupported function schemas and failing all prompts, the backend maps a limited set of recognizable questions (month summary, transaction count/status, amount threshold, and explicit date range) to validated service calls, and passes the returned data to Ollama. Unsupported personal financial questions return a limitation rather than guessed data.
 - Tool search returns only a bounded, minimized set of fields. It is not a replacement for transaction APIs or an unrestricted data export.
 - Local Ollama avoids sending prompts to a hosted model, but generation can be slow and constrained by local hardware/model quality. Ordinary tests mock AI calls.
 - Vector search was deliberately not added: structured fields and totals require deterministic database logic, and semantic description retrieval is not essential for the current model. Avoiding extra dependencies/infrastructure keeps the core stable.
@@ -443,4 +478,4 @@ Set-Location .\FinAssist
 .\mvnw.cmd test
 ```
 
-The tests cover MVC request/response behavior, validation, invalid enum filters, not-found responses, CRUD service operations, filtering inputs, invalid amount/pagination ranges, summary metrics and category totals, empty summaries, date-range behavior, summary route mapping, AI question validation, prompt forwarding, approved tool registration, tool argument validation, bounded result size, backend summary data, empty-result grounding, and model/tool failure handling. They mock AI/database dependencies and do not require MySQL or Ollama. The running application requires MySQL; `/api/ask` requires Ollama. No live Ollama/MySQL integration test is part of the Maven suite.
+The tests cover MVC request/response behavior, validation, invalid enum filters, not-found responses, CRUD service operations, filtering inputs, invalid amount/pagination ranges, summary metrics and category totals, empty summaries, date-range behavior, summary route mapping, AI question validation, prompt forwarding without model tools, supported question routing, bounded backend search, exact backend summary data, empty-result grounding, and model/query failure handling. They mock AI/database dependencies and do not require MySQL or Ollama. The running application requires MySQL; `/api/ask` requires Ollama. No live Ollama/MySQL integration test is part of the Maven suite.

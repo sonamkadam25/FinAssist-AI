@@ -1,0 +1,105 @@
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">OVERVIEW</p>
+    <h1>Good day<span class="heading-period">.</span></h1>
+    <p class="page-subtitle">A clear view of your recorded transaction activity.</p>
+  </div>
+  <a class="button button-primary" routerLink="/transactions" [queryParams]="{ action: 'create' }">
+    <span aria-hidden="true">＋</span> Add transaction
+  </a>
+</section>
+
+@if (errorMessage) {
+  <div class="alert alert-error" role="alert">
+    <span>{{ errorMessage }}</span>
+    <button class="button button-secondary button-small" type="button" (click)="load()">Try again</button>
+  </div>
+}
+
+<section class="metric-grid" aria-label="Transaction summary">
+  @if (loading) {
+    @for (card of [1, 2, 3, 4]; track card) {
+      <div class="metric-card skeleton-card" aria-hidden="true">
+        <div class="skeleton skeleton-label"></div><div class="skeleton skeleton-value"></div>
+      </div>
+    }
+  } @else if (summary) {
+    <article class="metric-card">
+      <div class="metric-top"><span class="metric-icon icon-blue">▤</span><span class="metric-trend">All records</span></div>
+      <p class="metric-label">Total transactions</p>
+      <p class="metric-value">{{ summary.totalTransactions | number }}</p>
+      <p class="metric-footnote">{{ summary.completedTransactions | number }} completed</p>
+    </article>
+    <article class="metric-card">
+      <div class="metric-top"><span class="metric-icon icon-green">↗</span><span class="metric-trend">Completed</span></div>
+      <p class="metric-label">Total income</p>
+      <p class="metric-value">{{ summary.totalIncome | number:'1.2-2' }}</p>
+      <p class="metric-footnote">From completed income records</p>
+    </article>
+    <article class="metric-card">
+      <div class="metric-top"><span class="metric-icon icon-amber">↙</span><span class="metric-trend">Completed</span></div>
+      <p class="metric-label">Total expenses</p>
+      <p class="metric-value">{{ summary.totalExpenses | number:'1.2-2' }}</p>
+      <p class="metric-footnote">From completed expense records</p>
+    </article>
+    <article class="metric-card">
+      <div class="metric-top"><span class="metric-icon icon-violet">＝</span><span class="metric-trend">Net</span></div>
+      <p class="metric-label">Net transaction total</p>
+      <p class="metric-value">{{ summary.netBalance | number:'1.2-2' }}</p>
+      <p class="metric-footnote">Income minus expenses, not an account balance</p>
+    </article>
+  }
+</section>
+
+@if (!loading && summary && summary.totalTransactions === 0) {
+  <section class="empty-card dashboard-empty">
+    <div class="empty-icon" aria-hidden="true">▤</div>
+    <h2>Your transaction overview starts here</h2>
+    <p>Add a synthetic or demo transaction to see real summary statistics.</p>
+    <a class="button button-primary" routerLink="/transactions" [queryParams]="{ action: 'create' }">Add your first transaction</a>
+  </section>
+}
+
+<section class="dashboard-columns">
+  <article class="panel recent-panel">
+    <div class="panel-heading">
+      <div><h2>Recent transactions</h2><p>Your latest recorded activity</p></div>
+      <a class="text-link" routerLink="/transactions">View all <span aria-hidden="true">→</span></a>
+    </div>
+    @if (loading) {
+      <div class="loading-row"><span class="spinner"></span> Loading transactions…</div>
+    } @else if (recent.length === 0) {
+      <div class="inline-empty">No transactions to show yet.</div>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Transaction</th><th>Date</th><th>Status</th><th class="align-right">Amount</th></tr></thead>
+          <tbody>
+            @for (transaction of recent; track transaction.id) {
+              <tr>
+                <td><div class="transaction-cell"><span class="transaction-avatar" [class.income-avatar]="transaction.transactionType === 'INCOME'">{{ transaction.transactionType === 'INCOME' ? '↗' : '↙' }}</span><span><strong>{{ transaction.merchant }}</strong><small>{{ transaction.category }}</small></span></div></td>
+                <td class="muted-cell">{{ transaction.transactionDate | date:'MMM d, y' }}</td>
+                <td><span class="status-badge" [class]="'status-badge status-' + transaction.status.toLowerCase()">{{ transaction.status }}</span></td>
+                <td class="align-right amount-cell" [class.income-text]="transaction.transactionType === 'INCOME'">{{ transaction.transactionType === 'INCOME' ? '+' : '−' }}{{ transaction.amount | number:'1.2-2' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </article>
+
+  <article class="panel status-panel">
+    <div class="panel-heading"><div><h2>Transaction status</h2><p>Records by processing status</p></div></div>
+    @if (loading) {
+      <div class="loading-row"><span class="spinner"></span> Loading summary…</div>
+    } @else if (summary) {
+      <div class="status-stat"><span class="status-key"><i class="status-dot dot-completed"></i>Completed</span><strong>{{ summary.completedTransactions }}</strong></div>
+      <div class="status-stat"><span class="status-key"><i class="status-dot dot-pending"></i>Pending</span><strong>{{ summary.pendingTransactions }}</strong></div>
+      <div class="status-stat"><span class="status-key"><i class="status-dot dot-failed"></i>Failed</span><strong>{{ summary.failedTransactions }}</strong></div>
+      <div class="status-note">Pending and failed records are counted but excluded from income and expense totals.</div>
+    }
+  </article>
+</section>
+
+<div class="privacy-note"><span aria-hidden="true">ⓘ</span> This local demo uses the shared backend dataset. It is not connected to a bank account.</div>
