@@ -41,8 +41,7 @@ public class TransactionService {
                 request.merchant(),
                 request.description(),
                 request.transactionDate(),
-                request.status() == null ? TransactionStatus.PENDING : request.status()
-        );
+                request.status() == null ? TransactionStatus.PENDING : request.status());
         return TransactionResponse.from(transactionRepository.save(transaction));
     }
 
@@ -56,8 +55,7 @@ public class TransactionService {
             LocalDateTime startDate,
             LocalDateTime endDate,
             int page,
-            int size
-    ) {
+            int size) {
         validateFilters(minAmount, maxAmount, startDate, endDate);
         if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
             throw new IllegalArgumentException("page must be non-negative and size must be between 1 and 100");
@@ -80,16 +78,14 @@ public class TransactionService {
                 TransactionType.EXPENSE,
                 TransactionStatus.COMPLETED,
                 TransactionStatus.PENDING,
-                TransactionStatus.FAILED
-        );
+                TransactionStatus.FAILED);
         List<CategorySummary> expenseTotals = new ArrayList<>();
         List<CategorySummary> incomeTotals = new ArrayList<>();
         for (var categoryAggregate : transactionRepository.summarizeByCategory(
                 startDate, endDate, TransactionStatus.COMPLETED)) {
             CategorySummary categorySummary = new CategorySummary(
                     categoryAggregate.getCategory(),
-                    zeroIfNull(categoryAggregate.getTotalAmount())
-            );
+                    zeroIfNull(categoryAggregate.getTotalAmount()));
             if (categoryAggregate.getTransactionType() == TransactionType.EXPENSE) {
                 expenseTotals.add(categorySummary);
             } else if (categoryAggregate.getTransactionType() == TransactionType.INCOME) {
@@ -108,8 +104,7 @@ public class TransactionService {
                 zeroIfNull(aggregate.getPendingTransactions()),
                 zeroIfNull(aggregate.getFailedTransactions()),
                 List.copyOf(expenseTotals),
-                List.copyOf(incomeTotals)
-        );
+                List.copyOf(incomeTotals));
     }
 
     @Transactional(readOnly = true)
@@ -142,8 +137,7 @@ public class TransactionService {
             BigDecimal minAmount,
             BigDecimal maxAmount,
             LocalDateTime startDate,
-            LocalDateTime endDate
-    ) {
+            LocalDateTime endDate) {
         if (minAmount != null && minAmount.signum() <= 0) {
             throw new IllegalArgumentException("minAmount must be greater than zero");
         }
