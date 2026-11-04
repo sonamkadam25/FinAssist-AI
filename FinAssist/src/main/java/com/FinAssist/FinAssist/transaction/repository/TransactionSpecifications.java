@@ -20,8 +20,7 @@ public final class TransactionSpecifications {
             TransactionType transactionType,
             String category,
             LocalDateTime startDate,
-            LocalDateTime endDate
-    ) {
+            LocalDateTime endDate) {
         return (root, query, criteriaBuilder) -> {
             var predicates = criteriaBuilder.conjunction();
             if (minAmount != null) {
